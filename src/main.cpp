@@ -12,6 +12,9 @@
 
     FULL WORKING VERSION   tested with LORA REMOTE sending and Debug
 
+  5/17/22 Added Main Delay Loop every 10 seconds
+          Added last fill time to display in seconds
+
 */
 
 #include <Arduino.h>
@@ -74,9 +77,19 @@ int radioID   = 0;
 int wellFULL  = 0;
 int wellEMPTY = 0;
 
+
+unsigned long currentMillis = 0;
+
+const long MAININTERVAL      = 10000;   // MAIN DELAY counter
 const long ONESECONDINTERVAL = 1000;   // one second counter
 const long TWOSECONDINTERVAL = 3000;   // two second counter
-const long DEFAULTINTERVAL   = 5000;   // two second counter
+const long DEFAULTINTERVAL   = 5000;   // Default Interval
+
+
+
+long FillTime        = 0;   // Fill Time Counter
+long FillStartTime   = 0;   // Fill Time Counter
+long FillStopTime    = 0;   // Fill Time Counter
 
 long previousMillis = 0;        // will store last time LED was updated
 
@@ -126,16 +139,33 @@ void idleScreen(){
   else
     u8x8.println("FULL  = FALSE");
 
-  u8x8.println("");
+  //u8x8.println("");
   if(powerDetected)
     u8x8.println("POWER");
   else
     u8x8.println("NO POWER");
 
-  if(debug)
-    u8x8.println("DEBUG Mode");
-  else
+  //FillStopTime = 14400000;
+  //FillStartTime = 1000;
+
+  if(FillStopTime > FillStartTime){
+    FillTime =  FillStopTime - FillStartTime;
+    FillTime = (FillTime/1000)/60;
     u8x8.println("");
+    u8x8.println("FT Mins  " + String(FillTime));
+  }else
+  {
+    u8x8.println("");
+    u8x8.println("FT Unknown");
+  }
+
+
+
+  //if(debug)
+  //  u8x8.println("DEBUG Mode");
+  //else
+  //  u8x8.println("");
+
 
 
   //u8x8.println("");
@@ -186,6 +216,7 @@ void valveClose(bool close ){
     digitalWrite(valveOpenPin, HIGH);  // close valve to divert flow
     ValveStatus = CLOSED;
     debugPrintln("Close Valve");
+    FillStartTime = millis();  // Save start time in milliseconds
     return;
     
   }
@@ -198,6 +229,7 @@ void valveClose(bool close ){
 
     digitalWrite(valveOpenPin, LOW);  // open valve normal mode bypass
     ValveStatus = OPEN;
+    FillStopTime = millis();  // Save start time in milliseconds
     debugPrintln("Open Valve");
   }    
 }
@@ -205,6 +237,10 @@ void valveClose(bool close ){
 // *****************************************   1 time SETUP CODE  ************************************
 void setup() {
   Serial.begin(115200);
+  currentMillis = millis();
+  FillStartTime   = 0;
+  FillStopTime = 0;
+
   u8x8.begin();
   pinMode(powerDetectedPin,INPUT_PULLDOWN);  // pull down to zero
   pinMode(valveOpenPin,OUTPUT);      // pull down to zero
@@ -223,11 +259,14 @@ void setup() {
 
   LoRa.onReceive(onLORAReceive);
   LoRa.receive();
+  Heltec.LoRa.setTxPowerMax(20);
+  //LoRa.setTxPower(20,RF_PACONFIG_PASELECT_PABOOST); //20dB output must via PABOOST
 
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  
+  currentMillis = millis();
 
   if(receiveflag){  // Process any data
     receiveLORAData(packet);  // got data over LORA from someone
@@ -280,7 +319,8 @@ void loop() {
     valveClose(false);  // open valve backup and reset  
   }
 
-  if(long(currentMillis - previousMillis) > DEFAULTINTERVAL) {
+  // main delay and screen update
+  if(long(currentMillis - previousMillis) > MAININTERVAL) {
     previousMillis = currentMillis;  
     
     u8x8.begin();  // fixes a bug in display lib
@@ -289,6 +329,7 @@ void loop() {
     LoRa.receive();
   }
 
-  delay(1000);
+  // main delay
+  delay(ONESECONDINTERVAL);
 
 }
